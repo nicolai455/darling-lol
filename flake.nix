@@ -162,7 +162,7 @@
             comment = "Setup or install League of Legends via Darling";
             exec = "darling-lol-installer";
             icon = "darling-lol";
-            terminal = true;
+            terminal = false;
             categories = [
               "Game"
             ];
@@ -179,7 +179,7 @@
         installPhase = ''
           runHook preInstall
 
-          mkdir -p $out/bin $out/share/darling-lol $out/share/icons/hicolor/scalable/apps
+          mkdir -p $out/bin $out/share/darling-lol $out/share/icons/hicolor/scalable/apps $out/share/applications
           cp -r * $out/share/darling-lol/
           cp darling-lol.svg $out/share/icons/hicolor/scalable/apps/darling-lol.svg
 
@@ -189,16 +189,25 @@
             --replace-fail "@FHS_BIN@" "${darlingLolFhs}/bin/darling-lol-fhs"
           chmod +x $out/bin/darling-lol
 
+          # Install standalone installer script that wraps in terminal
+          cat << 'WRAPPER_EOF' > $out/bin/darling-lol-installer
+#!/usr/bin/env bash
+set -e
+exec $out/bin/darling-lol --installer "$@"
+WRAPPER_EOF
+          chmod +x $out/bin/darling-lol-installer
+
           makeWrapper ${darlingLolFhs}/bin/darling-lol-fhs $out/bin/darling-lol-shell \
             --add-flags "--"
-
-          makeWrapper ${darlingLolFhs}/bin/darling-lol-fhs $out/bin/darling-lol-installer \
-            --run "cd \''${XDG_DATA_HOME:-\$HOME/.local/share}/darling-lol" \
-            --add-flags "./scripts/installer.sh"
 
           makeWrapper ${darlingLolFhs}/bin/darling-lol-fhs $out/bin/darling-lol-build \
             --run "cd \''${XDG_DATA_HOME:-\$HOME/.local/share}/darling-lol" \
             --add-flags "./scripts/build.sh"
+
+          # Install desktop items directly
+          for desktopItem in $desktopItems; do
+            cp "$desktopItem/share/applications"/* "$out/share/applications/"
+          done
 
           runHook postInstall
         '';

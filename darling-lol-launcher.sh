@@ -40,6 +40,61 @@ run_in_term() {
   fi
 }
 
+# If --installer flag is provided, run interactive setup in a terminal
+if [ "${1:-}" = "--installer" ]; then
+  shift
+  cat << 'EOF' > "$WORKSPACE/interactive-setup.sh"
+#!/usr/bin/env bash
+set -e
+echo "=========================================================="
+echo "   League of Legends macOS runner via Darling (NixOS)     "
+echo "=========================================================="
+echo ""
+echo "Workspace: $(pwd)"
+echo "Prefix:    ${DPREFIX:-$HOME/.darling}"
+echo "Display:   ${DISPLAY}"
+echo ""
+
+if ! command -v darling >/dev/null 2>&1; then
+  echo "Darling runtime is not yet built/installed."
+  echo "Step 1 will build Darling with LoL patches."
+  echo "Note: Shallow clone enabled. Compiling Darling requires ~40-50GB disk."
+  echo ""
+  read -p "Would you like to start the build now? [Y/n] " -n 1 -r
+  echo
+  if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+    ./scripts/build.sh
+    echo ""
+    echo "Installing base runtime with cmake..."
+    if [ -w /usr/local ]; then
+      cmake --install build/darling-src/build
+    else
+      echo "Elevating privileges for /usr/local installation..."
+      sudo cmake --install build/darling-src/build
+    fi
+    ./scripts/install-runtime.sh
+  else
+    echo "Aborted."
+    exit 0
+  fi
+fi
+
+if [ ! -d "${DPREFIX:-$HOME/.darling}/Users/Shared/Riot Games/Riot Client.app" ]; then
+  echo ""
+  echo "Step 2: Fetch and launch Riot Client installer"
+  read -p "Enter region [default: euw]: " REGION
+  REGION="${REGION:-euw}"
+  ./scripts/installer.sh "$REGION"
+fi
+
+echo ""
+echo "Setup complete! You can now launch League of Legends from your application menu (Vicinae)."
+read -p "Press Enter to exit..."
+EOF
+  chmod +x "$WORKSPACE/interactive-setup.sh"
+  run_in_term "League of Legends Setup (Darling)" "$FHS_BIN" "$WORKSPACE/interactive-setup.sh"
+fi
+
 # If arguments were provided directly, run them within FHS
 if [ $# -gt 0 ]; then
   exec "$FHS_BIN" "$@"
