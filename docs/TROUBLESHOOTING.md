@@ -1,5 +1,23 @@
 # Troubleshooting
 
+## NixOS launcher fails before Riot opens
+
+A message saying Darling must be setuid root is not fixed by running `sudo`
+inside `buildFHSEnv`: bubblewrap enables `no_new_privs`, so setuid elevation is
+ignored there. Use the package's rootless launcher with subordinate UID/GID
+mapping enabled. Never make a mutable workspace executable host-setuid-root.
+
+If a newly installed client aborts with `Cannot load libavformat.so.62 (ELF)`,
+check the FHS runtime dependencies. The generated Darling wrappers use FFmpeg 8
+SONAMEs, so an unversioned nixpkgs `ffmpeg` dependency can break them when its
+major changes. The package pins `ffmpeg_8`; do not create fake ABI symlinks.
+
+Older packages used `cp -n` and never refreshed already-copied tools. The current
+launcher replaces packaged source files while retaining compiled/runtime data.
+An incomplete prefix can be backed up by renaming it with Darling stopped;
+never delete a populated Riot/game prefix just to repair the launcher.
+
+
 Use the [setup instructions](SETUP.md) from the repository root as your ordinary user. Exit the game and both clients manually before a full installation or Darling restart. Incremental server/memory installers can replace files without interrupting processes, but their changes need a later full restart to activate.
 
 ## Memory installer: permission denied

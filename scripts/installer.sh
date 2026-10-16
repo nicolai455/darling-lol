@@ -2,7 +2,7 @@
 set -eu
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo"
-export PATH="$repo/usr-local/bin:/usr/local/bin:$PATH"
+export PATH="${DARLING_RUNNER_DIR:+$DARLING_RUNNER_DIR:}$repo/usr-local/bin:/usr/local/bin:$PATH"
 region=${1:-euw}
 case "$region" in euw|eune|na|br|kr|jp|lan|las|oce|ru|tr) ;; *) echo 'Use a Riot installer region code' >&2; exit 1;; esac
 python3 scripts/configure.py >/dev/null

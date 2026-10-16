@@ -1,5 +1,26 @@
 # Setup and portability
 
+## NixOS package
+
+Use `darling-lol`, `darling-lol --installer`, or `darling-lol-shell` rather than
+invoking the raw FHS environment. The launcher uses `unshare --map-auto` before
+bubblewrap, so the user needs subordinate UID/GID ranges (`/etc/subuid` and
+`/etc/subgid`, or NixOS `users.users.<name>.autoSubUidGidRange = true`).
+Namespace root maps to a subordinate host ID, not host root. The FHS entrypoint
+restores the real Linux user's IDs while retaining namespace-only capabilities;
+the Darling shim temporarily switches effective IDs for mounts. No `sudo`,
+root-owned binary in a writable workspace, or host setuid installation is needed.
+
+The launcher refreshes packaged scripts in the mutable workspace on each run,
+preserving `build/`, `usr-local/`, and the guest prefix. Edit the source checkout,
+not the copied workspace tools. Runtime setup writes `build/nix-runtime-ready`
+only after installing the paired overrides. The FFmpeg dependency is explicitly
+8.x: generated Darling AV wrappers reference `libavformat.so.62`,
+`libavcodec.so.62`, and `libavutil.so.60`; FFmpeg 9 cannot replace those ABI versions.
+
+Run the package regression suite with `python3 -m unittest discover -s tests -v`.
+
+
 The patch manifest pins Darling to `60ba801decee7a00782f74f6be4c8ffb013f79ff` and records every changed submodule's revision. `scripts/prepare.py` checks each revision before applying patches and never resets an existing checkout to make a patch apply. Re-running it accepts an already-applied patch.
 
 Git LFS must be available before fetching the upstream submodules. The pinned `darling-swift` submodule's `.lfsconfig` points at the retired `git-lfs.darlinghq.org`, which no longer accepts connections; `prepare.py` redirects that submodule's LFS requests to GitHub, which still serves the objects. Without that override a fresh `git submodule update` blocks with no output right after `src/external/sqlite` is checked out. The local development checkout had removed prebuilt Swift files from its working directory; that deletion is deliberately not exported. A fresh upstream checkout keeps its original Swift assets and licensing. Do not install Git LFS pointer text as a library.

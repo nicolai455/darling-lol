@@ -12,4 +12,8 @@ python3 scripts/prepare.py
 cmake -S build/darling-src -B build/darling-src/build -G 'Unix Makefiles' \
   -DCMAKE_BUILD_TYPE= -DTARGET_i386=OFF -DCMAKE_INSTALL_PREFIX=/usr/local -DENABLE_METAL=ON
 cmake --build build/darling-src/build --parallel "${JOBS:-$(nproc)}"
-echo 'Build complete. Install the base runtime with: sudo cmake --install build/darling-src/build'
+if [ -n "${DARLING_WORKSPACE:-}" ]; then
+  echo 'Build complete. Install the base runtime with: cmake --install build/darling-src/build'
+else
+  echo 'Build complete. Install the base runtime with: sudo cmake --install build/darling-src/build'
+fi

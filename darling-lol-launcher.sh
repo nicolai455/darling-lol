@@ -4,31 +4,30 @@ set -euo pipefail
 WORKSPACE="${XDG_DATA_HOME:-$HOME/.local/share}/darling-lol"
 SHARE_DIR="@SHARE_DIR@"
 FHS_BIN="@FHS_BIN@"
+UNSHARE_BIN="@UNSHARE_BIN@"
 
 mkdir -p "$WORKSPACE" "$WORKSPACE/usr-local"
-
-# Ensure DISPLAY defaults to :0 on modern Wayland/Xwayland if unset
 export DISPLAY="${DISPLAY:-:0}"
 export EGL_PLATFORM="${EGL_PLATFORM:-x11}"
 export DPREFIX="${DPREFIX:-$HOME/.darling}"
-export PATH="/usr/local/bin:$PATH"
+export DARLING_HOST_UID="$(id -u)"
+export DARLING_HOST_GID="$(id -g)"
+export DARLING_WORKSPACE="$WORKSPACE"
 
-# Sync tooling scripts and upstream definitions into mutable user workspace
+# Refresh packaged sources on upgrades; never replace compiled or installed data.
+# cp -n left old tools in place forever, hiding fixes from subsequent packages.
 for item in docs patches research scripts tests tools upstream LICENSE NOTICE.md README.md requirements.txt; do
   if [ -e "$SHARE_DIR/$item" ]; then
-    cp -rn "$SHARE_DIR/$item" "$WORKSPACE/" 2>/dev/null || true
+    cp -r --no-preserve=mode,ownership "$SHARE_DIR/$item" "$WORKSPACE/"
   fi
 done
-# Ensure all files and directories in workspace are writable by the user
-chmod -R u+rwX "$WORKSPACE" 2>/dev/null || true
-
 cd "$WORKSPACE"
 
-DARLING_PREFIX="$DPREFIX"
-RIOT_CLIENT="$DARLING_PREFIX/Applications/Riot Client.app"
-SHARED_CLIENT="$DARLING_PREFIX/Users/Shared/Riot Games/Riot Client.app"
+# Map subordinate IDs BEFORE bubblewrap sets no_new_privs. Inside this namespace
+# UID 0 is an unprivileged subordinate host ID, never the host's root account.
+# Keep the real user mapped to itself for file ownership and guest credentials.
+fhs_command=("$UNSHARE_BIN" --user --map-auto --map-current-user --setuid=0 --setgid=0 "$FHS_BIN")
 
-# Helper to find a suitable terminal emulator
 run_in_term() {
   local title="$1"
   shift
@@ -43,152 +42,44 @@ run_in_term() {
   fi
 }
 
-# If --installer flag is provided, run interactive setup in a terminal
-if [ "${1:-}" = "--installer" ]; then
+installer=0
+if [ "${1:-}" = --installer ]; then
+  installer=1
   shift
-  cat << 'EOF' > "$WORKSPACE/interactive-setup.sh"
-#!/usr/bin/env bash
-set -e
-export PATH="$(pwd)/usr-local/bin:/usr/local/bin:$PATH"
-echo "=========================================================="
-echo "   League of Legends macOS runner via Darling (NixOS)     "
-echo "=========================================================="
-echo ""
-echo "Workspace: $(pwd)"
-echo "Prefix:    ${DPREFIX:-$HOME/.darling}"
-echo "Display:   ${DISPLAY}"
-echo ""
-
-if [ ! -f "$(pwd)/usr-local/bin/darling" ] || [ "$(stat -c '%u:%a' "$(pwd)/usr-local/bin/darling" 2>/dev/null)" != "0:4755" ]; then
-  if [ ! -f "$(pwd)/usr-local/bin/darling" ]; then
-    echo "Darling runtime is not yet built/installed."
-    echo "Step 1 will build Darling with LoL patches."
-    echo "Note: Compiling Darling requires ~40-50GB disk."
-    echo ""
-    read -p "Would you like to start the build now? [Y/n] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
-      if ! ./scripts/build.sh; then
-        echo ""
-        echo "Build failed! See error output above."
-        read -p "Press Enter to exit..."
-        exit 1
-      fi
-      echo ""
-      echo "Installing base runtime to /usr/local..."
-      mkdir -p /usr/local
-      cmake --install build/darling-src/build
-      # Fix loader interpreter for unprivileged FHS execution
-      find /usr/local/ -type f -exec patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 {} + 2>/dev/null || true
-    else
-      echo "Aborted."
-      exit 0
-    fi
-  fi
-
-  if [ "$(stat -c '%u:%a' "$(pwd)/usr-local/bin/darling" 2>/dev/null)" != "0:4755" ]; then
-    echo ""
-    echo "Darling requires setuid root to mount Linux overlayfs and create namespaces."
-    echo "Authenticating to grant setuid root permissions..."
-    sudo chown root:root "$(pwd)/usr-local/bin/darling"
-    sudo chmod 4755 "$(pwd)/usr-local/bin/darling"
-  fi
-
-  ./scripts/install-runtime.sh
+fi
+if [ "$installer" = 0 ] && [ $# -gt 0 ]; then
+  exec "${fhs_command[@]}" "$@"
 fi
 
-if [ ! -d "${DPREFIX:-$HOME/.darling}/Users/Shared/Riot Games/Riot Client.app" ]; then
-  echo ""
-  echo "Step 2: Fetch and launch Riot Client installer"
-  read -p "Enter region [default: euw]: " REGION
-  REGION="${REGION:-euw}"
-  ./scripts/installer.sh "$REGION"
+if [ "$installer" = 0 ] && [ -x "$WORKSPACE/usr-local/bin/darling" ] &&
+   { [ -e "$DPREFIX/Applications/Riot Client.app" ] || [ -d "$DPREFIX/Users/Shared/Riot Games/Riot Client.app" ]; }; then
+  exec "${fhs_command[@]}" ./scripts/run.sh
 fi
 
-echo ""
-echo "Setup complete! Launching League of Legends..."
-exec ./scripts/run.sh
-EOF
-  chmod +x "$WORKSPACE/interactive-setup.sh"
-  run_in_term "League of Legends Setup (Darling)" "$FHS_BIN" "$WORKSPACE/interactive-setup.sh"
-fi
-
-# If arguments were provided directly, run them within FHS
-if [ $# -gt 0 ]; then
-  exec "$FHS_BIN" "$@"
-fi
-
-# Check if Darling & Riot client are already installed
-if [ -e "$DARLING_PREFIX/bin/darling" ] || [ -e "/usr/local/bin/darling" ] || [ -e "$WORKSPACE/usr-local/bin/darling" ]; then
-  if [ -e "$RIOT_CLIENT" ] || [ -d "$SHARED_CLIENT" ]; then
-    exec "$FHS_BIN" ./scripts/run.sh
-  fi
-fi
-
-# Otherwise, prompt the user in a terminal to run setup/installer
 cat << 'EOF' > "$WORKSPACE/interactive-setup.sh"
 #!/usr/bin/env bash
-set -e
-export PATH="$(pwd)/usr-local/bin:/usr/local/bin:$PATH"
-echo "=========================================================="
-echo "   League of Legends macOS runner via Darling (NixOS)     "
-echo "=========================================================="
-echo ""
+set -euo pipefail
+export PATH="${DARLING_RUNNER_DIR:+$DARLING_RUNNER_DIR:}$(pwd)/usr-local/bin:/usr/local/bin:$PATH"
+echo "League of Legends macOS runner via Darling (NixOS)"
 echo "Workspace: $(pwd)"
 echo "Prefix:    ${DPREFIX:-$HOME/.darling}"
-echo "Display:   ${DISPLAY}"
-echo ""
-
-if [ ! -f "$(pwd)/usr-local/bin/darling" ] || [ "$(stat -c '%u:%a' "$(pwd)/usr-local/bin/darling" 2>/dev/null)" != "0:4755" ]; then
-  if [ ! -f "$(pwd)/usr-local/bin/darling" ]; then
-    echo "Darling runtime is not yet built/installed."
-    echo "Step 1 will build Darling with LoL patches."
-    echo "Note: Compiling Darling requires ~40-50GB disk."
-    echo ""
-    read -p "Would you like to start the build now? [Y/n] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
-      if ! ./scripts/build.sh; then
-        echo ""
-        echo "Build failed! See error output above."
-        read -p "Press Enter to exit..."
-        exit 1
-      fi
-      echo ""
-      echo "Installing base runtime to /usr/local..."
-      mkdir -p /usr/local
-      cmake --install build/darling-src/build
-      # Fix loader interpreter for unprivileged FHS execution
-      find /usr/local/ -type f -exec patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 {} + 2>/dev/null || true
-    else
-      echo "Aborted."
-      exit 0
-    fi
-  fi
-
-  if [ "$(stat -c '%u:%a' "$(pwd)/usr-local/bin/darling" 2>/dev/null)" != "0:4755" ]; then
-    echo ""
-    echo "Darling requires setuid root to mount Linux overlayfs and create namespaces."
-    echo "Authenticating to grant setuid root permissions..."
-    sudo chown root:root "$(pwd)/usr-local/bin/darling"
-    sudo chmod 4755 "$(pwd)/usr-local/bin/darling"
-  fi
-
+echo "Darling runs in an unprivileged user namespace; no sudo or setuid installation."
+if [ ! -x "$(pwd)/usr-local/bin/darling" ]; then
+  echo "Building Darling requires approximately 40–50 GB disk space."
+  read -r -p "Start the build? [Y/n] " REPLY
+  case "$REPLY" in n|N) exit 0;; esac
+  ./scripts/build.sh
+  cmake --install build/darling-src/build
+fi
+# This is also required when a previous attempt installed only the base runtime.
+if [ ! -f build/nix-runtime-ready ]; then
   ./scripts/install-runtime.sh
 fi
-
 if [ ! -d "${DPREFIX:-$HOME/.darling}/Users/Shared/Riot Games/Riot Client.app" ]; then
-  echo ""
-  echo "Step 2: Fetch and launch Riot Client installer"
-  read -p "Enter region [default: euw]: " REGION
-  REGION="${REGION:-euw}"
-  ./scripts/installer.sh "$REGION"
+  read -r -p "Region [euw]: " REGION
+  ./scripts/installer.sh "${REGION:-euw}"
 fi
-
-echo ""
-echo "Setup complete! Launching League of Legends..."
 exec ./scripts/run.sh
 EOF
 chmod +x "$WORKSPACE/interactive-setup.sh"
-
-run_in_term "League of Legends Setup (Darling)" "$FHS_BIN" "$WORKSPACE/interactive-setup.sh"
+run_in_term "League of Legends Setup (Darling)" "${fhs_command[@]}" "$WORKSPACE/interactive-setup.sh"

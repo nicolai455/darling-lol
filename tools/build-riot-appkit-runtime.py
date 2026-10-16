@@ -19,6 +19,12 @@ for name in ['NSResponder', 'NSApplication', 'NSWindow', 'NSDisplay', 'NSView', 
                     str(project / f'build/darling-src/src/external/cocotron/AppKit/{name}.m'),
                     '-o', str(obj)], check=True)
     link[link.index(f'CMakeFiles/AppKit.dir/{name}.m.o')] = str(obj)
+# Electron configures Finder-tag controls even on directory-only panels.
+compat = project / 'build/riot-save-panel-compat.o'
+subprocess.run(['clang', *flags['C_DEFINES'], *flags['C_INCLUDES'], *flags['C_FLAGS'],
+                '-O2', '-Wno-macro-redefined', '-c',
+                str(project / 'tools/riot-save-panel-compat.m'), '-o', str(compat)], check=True)
+link.append(str(compat))
 link[link.index('-o') + 1] = str(project / 'build/riot-AppKit')
 subprocess.run(link, cwd=framework, check=True)
 for name in ['riot-event-coalescing-check', 'riot-scroll-event-check', 'riot-appkit-pump-check', 'riot-window-layout-check']:

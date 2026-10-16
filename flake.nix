@@ -21,6 +21,14 @@
         ]
       );
 
+      darlingEntry = pkgs.writeShellScript "darling-lol-entry" (builtins.readFile ./scripts/fhs-entry.sh);
+      darlingRunner = pkgs.runCommand "darling-lol-rootless-runner" { } ''
+        mkdir -p $out/bin
+        cp ${./scripts/darling-rootless.sh} $out/bin/darling
+        chmod +x $out/bin/darling
+        patchShebangs $out/bin/darling
+      '';
+
       # Common runtime libraries needed by Darling, Vulkan, X11, Audio, and graphics
       buildDeps = with pkgs; [
         # Build tools & compilers
@@ -41,6 +49,7 @@
         unzip
         file
         patchelf
+        util-linux
 
         # System & core libraries
         glibc
@@ -79,7 +88,9 @@
         libjpeg.dev
         libtiff
         giflib
-        ffmpeg
+        # Darling's generated AV wrappers bind FFmpeg 8 SONAMEs (e.g. .62).
+        # Do not let nixpkgs' default FFmpeg major silently break installed builds.
+        ffmpeg_8
 
         # X11 & input
         xorgproto
@@ -124,7 +135,10 @@
         extraOutputsToInstall = [ "dev" "out" ];
 
         extraBwrapArgs = [
-          "--bind-try" (''$'' + ''{HOME}/.local/share/darling-lol/usr-local'') "/usr-local"
+          # The outer user namespace maps subordinate IDs before no_new_privs.
+          # These capabilities apply only inside that namespace, not on the host.
+          "--cap-add" "ALL"
+          "--bind-try" (''$'' + ''{DARLING_WORKSPACE}/usr-local'') "/usr-local"
         ];
 
         extraBuildCommands = ''
@@ -172,7 +186,8 @@ EOF
           export DPREFIX="''${DPREFIX:-$HOME/.darling}"
           export LC_ALL=C.UTF-8
           export LANG=C.UTF-8
-          export PATH="/usr/local/bin:''${PATH:-}"
+          export DARLING_RUNNER_DIR=${darlingRunner}/bin
+          export PATH="$DARLING_RUNNER_DIR:/usr/local/bin:''${PATH:-}"
           export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:/usr/local/share/pkgconfig:/usr/lib/pkgconfig:/usr/lib64/pkgconfig:/usr/share/pkgconfig:''${PKG_CONFIG_PATH:-}"
           export CMAKE_PREFIX_PATH="/usr/local:/usr:/usr/lib/cmake/llvm:''${CMAKE_PREFIX_PATH:-}"
           unset NIX_LDFLAGS NIX_CFLAGS_COMPILE NIX_HARDENING_ENABLE CPATH LIBRARY_PATH
@@ -180,9 +195,9 @@ EOF
 
         runScript = pkgs.writeShellScript "darling-lol-run" ''
           if [ $# -eq 0 ]; then
-            exec bash
+            exec ${darlingEntry} bash
           else
-            exec "$@"
+            exec ${darlingEntry} "$@"
           fi
         '';
       };
@@ -191,7 +206,13 @@ EOF
       darlingLol = pkgs.stdenv.mkDerivation {
         pname = "darling-lol";
         version = "0.1.0";
-        src = ./.;
+        src = pkgs.lib.cleanSourceWith {
+          src = ./.;
+          filter = path: type:
+            let name = baseNameOf path; in
+            !(builtins.elem name [ ".git" "build" "__pycache__" "usr-local" "darling-install" ])
+            && !(pkgs.lib.hasPrefix "result" name);
+        };
 
         nativeBuildInputs = [
           pkgs.makeWrapper
@@ -210,14 +231,17 @@ EOF
           # Install configured launcher
           substitute ./darling-lol-launcher.sh $out/bin/darling-lol \
             --replace-fail "@SHARE_DIR@" "$out/share/darling-lol" \
-            --replace-fail "@FHS_BIN@" "${darlingLolFhs}/bin/darling-lol-fhs"
+            --replace-fail "@FHS_BIN@" "${darlingLolFhs}/bin/darling-lol-fhs" \
+            --replace-fail "@UNSHARE_BIN@" "${pkgs.util-linux}/bin/unshare"
           chmod +x $out/bin/darling-lol
 
-          makeWrapper ${darlingLolFhs}/bin/darling-lol-fhs $out/bin/darling-lol-shell \
-            --add-flags "--"
+          makeWrapper $out/bin/darling-lol $out/bin/darling-lol-installer \
+            --add-flags "--installer"
 
-          makeWrapper ${darlingLolFhs}/bin/darling-lol-fhs $out/bin/darling-lol-build \
-            --run "cd \''${XDG_DATA_HOME:-\$HOME/.local/share}/darling-lol" \
+          makeWrapper $out/bin/darling-lol $out/bin/darling-lol-shell \
+            --add-flags "bash"
+
+          makeWrapper $out/bin/darling-lol $out/bin/darling-lol-build \
             --add-flags "./scripts/build.sh"
 
           cat << 'DESKTOP_EOF' > $out/share/applications/darling-lol.desktop
@@ -260,7 +284,7 @@ DESKTOP_EOF
         };
         shell = {
           type = "app";
-          program = "${darlingLolFhs}/bin/darling-lol-fhs";
+          program = "${darlingLol}/bin/darling-lol-shell";
         };
         installer = {
           type = "app";
