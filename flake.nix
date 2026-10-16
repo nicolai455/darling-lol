@@ -29,8 +29,10 @@
         ninja
         pkg-config
         clang
-        llvm
         lld
+        llvm
+        llvm.dev
+        llvmPackages.clang-unwrapped
         bison
         flex
         git
@@ -49,6 +51,9 @@
         libffi
         libffi.dev
         libbsd
+        libbsd.dev
+        libmd
+        libmd.dev
         libcap
         libelf
         fuse
@@ -118,11 +123,53 @@
 
         extraOutputsToInstall = [ "dev" "out" ];
 
+        extraBuildCommands = ''
+          mkdir -p bin usr/bin
+          rm -f bin/clang bin/clang++ usr/bin/clang usr/bin/clang++
+          cat << 'EOF' > usr/bin/clang
+#!/usr/bin/env bash
+is_darwin=0
+for a in "$@"; do
+  if [[ "$a" == *darwin* ]] || [[ "$a" == *apple* ]] || [[ "$a" == *macosx* ]]; then
+    is_darwin=1
+    break
+  fi
+done
+if [[ "$is_darwin" -eq 1 ]]; then
+  exec ${pkgs.llvmPackages.clang-unwrapped}/bin/clang "$@"
+else
+  exec ${pkgs.clang}/bin/clang -idirafter /usr/include "$@"
+fi
+EOF
+          chmod +x usr/bin/clang
+
+          cat << 'EOF' > usr/bin/clang++
+#!/usr/bin/env bash
+is_darwin=0
+for a in "$@"; do
+  if [[ "$a" == *darwin* ]] || [[ "$a" == *apple* ]] || [[ "$a" == *macosx* ]]; then
+    is_darwin=1
+    break
+  fi
+done
+if [[ "$is_darwin" -eq 1 ]]; then
+  exec ${pkgs.llvmPackages.clang-unwrapped}/bin/clang++ "$@"
+else
+  exec ${pkgs.clang}/bin/clang++ -idirafter /usr/include "$@"
+fi
+EOF
+          chmod +x usr/bin/clang++
+          cp -f usr/bin/clang bin/clang
+          cp -f usr/bin/clang++ bin/clang++
+        '';
+
         profile = ''
           export DPREFIX="''${DPREFIX:-$HOME/.darling}"
           export LC_ALL=C.UTF-8
           export LANG=C.UTF-8
           export PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/lib64/pkgconfig:/usr/share/pkgconfig:''${PKG_CONFIG_PATH:-}"
+          export CMAKE_PREFIX_PATH="/usr:/usr/lib/cmake/llvm:''${CMAKE_PREFIX_PATH:-}"
+          unset NIX_LDFLAGS NIX_CFLAGS_COMPILE NIX_HARDENING_ENABLE CPATH LIBRARY_PATH
         '';
 
         runScript = pkgs.writeShellScript "darling-lol-run" ''

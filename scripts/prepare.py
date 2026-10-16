@@ -48,6 +48,25 @@ if not (source/'.git').exists():
             if attempt == 3: raise
             print(f'Submodule fetch interrupted (attempt {attempt}/3). Retrying...', flush=True)
     print('Darling submodules initialized.',flush=True)
+
+# Compatibility fix: glibc 2.38+ provides strlcpy/strlcat in <string.h> with noexcept.
+# In cctools-port ld64, conditionally guard the fallback declarations to avoid redeclaration conflicts with modern glibc.
+cctools_strlcat = source / 'src/external/cctools-port/cctools/ld64/src/3rd/strlcat.h'
+if cctools_strlcat.exists():
+    content = cctools_strlcat.read_text()
+    if '#if !defined(__GLIBC__) || !__GLIBC_PREREQ(2, 38)' not in content:
+        cctools_strlcat.write_text(content.replace(
+            'size_t strlcat(char *dst, const char *src, size_t siz);',
+            '#if !defined(__GLIBC__) || !__GLIBC_PREREQ(2, 38)\nsize_t strlcat(char *dst, const char *src, size_t siz);\n#endif'
+        ))
+cctools_strlcpy = source / 'src/external/cctools-port/cctools/ld64/src/3rd/strlcpy.h'
+if cctools_strlcpy.exists():
+    content = cctools_strlcpy.read_text()
+    if '#if !defined(__GLIBC__) || !__GLIBC_PREREQ(2, 38)' not in content:
+        cctools_strlcpy.write_text(content.replace(
+            'size_t strlcpy(char *dst, const char *src, size_t siz);',
+            '#if !defined(__GLIBC__) || !__GLIBC_PREREQ(2, 38)\nsize_t strlcpy(char *dst, const char *src, size_t siz);\n#endif'
+        ))
 # Never reset someone else's checkout to make a patch apply.
 for component in manifest['components']:
     repo=source/component['path']
