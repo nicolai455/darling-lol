@@ -44,6 +44,10 @@
         glibc
         glibc.dev
         glibc.static
+        zlib
+        zlib.dev
+        libffi
+        libffi.dev
         libbsd
         libcap
         libelf
@@ -64,11 +68,16 @@
         cairo
         freetype
         fontconfig
+        libpng
+        libpng.dev
+        libjpeg
+        libjpeg.dev
         libtiff
         giflib
         ffmpeg
 
         # X11 & input
+        xorgproto
         libx11
         libxext
         libxrandr
@@ -107,12 +116,13 @@
         targetPkgs = pkgs: buildDeps;
         multiPkgs = pkgs: [ pkgs.glibc ];
 
-        extraOutputsToInstall = [ "dev" ];
+        extraOutputsToInstall = [ "dev" "out" ];
 
         profile = ''
           export DPREFIX="''${DPREFIX:-$HOME/.darling}"
           export LC_ALL=C.UTF-8
           export LANG=C.UTF-8
+          export PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/lib64/pkgconfig:/usr/share/pkgconfig:''${PKG_CONFIG_PATH:-}"
         '';
 
         runScript = pkgs.writeShellScript "darling-lol-run" ''
