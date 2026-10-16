@@ -1,0 +1,197 @@
+{
+  description = "Darling League of Legends - experimental macOS LoL runner on Linux via Darling";
+
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+  };
+
+  outputs =
+    { self, nixpkgs }:
+    let
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
+
+      # Python environment with dependencies required by tooling
+      pythonEnv = pkgs.python3.withPackages (
+        ps: with ps; [
+          requests
+          urllib3
+          websocket-client
+          pillow
+        ]
+      );
+
+      # Common runtime libraries needed by Darling, Vulkan, X11, Audio, and graphics
+      buildDeps = with pkgs; [
+        # Build tools & compilers
+        cmake
+        gnumake
+        ninja
+        pkg-config
+        clang
+        llvm
+        lld
+        bison
+        flex
+        git
+        git-lfs
+        curl
+        unzip
+        file
+        patchelf
+
+        # System & core libraries
+        glibc
+        glibc.dev
+        glibc.static
+        libbsd
+        libcap
+        libelf
+        fuse
+        systemdLibs # libudev
+        dbus
+        libxml2
+        openssl
+        libedit
+
+        # Graphics & Display
+        libGL
+        libGLU
+        mesa
+        vulkan-headers
+        vulkan-loader
+        vulkan-tools
+        cairo
+        freetype
+        fontconfig
+        libtiff
+        giflib
+        ffmpeg
+
+        # X11 & input
+        libx11
+        libxext
+        libxrandr
+        libxcursor
+        libxinerama
+        libxcomposite
+        libxdamage
+        libxfixes
+        libxi
+        libxrender
+        libxtst
+        libxcb
+        xcbutil
+        xcbutilwm
+        xcbutilimage
+        xcbutilkeysyms
+        xcbutilrenderutil
+        libxkbfile
+        libxkbcommon
+
+        # Audio
+        pulseaudio
+        libpulseaudio
+        alsa-lib
+
+        # Python
+        pythonEnv
+      ];
+
+      # FHS environment for building and running Darling and League of Legends.
+      # Darling requires root/multitasking mount & namespace semantics, /usr/local layout,
+      # and dynamically compiled overlays. An FHS environment provides the standard standard
+      # filesystem hierarchies (/usr/include, /usr/lib, /usr/bin) and native dynamic linker.
+      darlingLolFhs = pkgs.buildFHSEnv {
+        name = "darling-lol-fhs";
+        targetPkgs = pkgs: buildDeps;
+        multiPkgs = pkgs: [ pkgs.glibc ];
+
+        extraOutputsToInstall = [ "dev" ];
+
+        profile = ''
+          export DPREFIX="''${DPREFIX:-$HOME/.darling}"
+          export LC_ALL=C.UTF-8
+          export LANG=C.UTF-8
+        '';
+
+        runScript = pkgs.writeShellScript "darling-lol-run" ''
+          if [ $# -eq 0 ]; then
+            exec bash
+          else
+            exec "$@"
+          fi
+        '';
+      };
+
+      # Wrapper script package to run scripts directly
+      darlingLol = pkgs.stdenv.mkDerivation {
+        pname = "darling-lol";
+        version = "0.1.0";
+        src = ./.;
+
+        nativeBuildInputs = [ pkgs.makeWrapper ];
+
+        installPhase = ''
+          mkdir -p $out/bin $out/share/darling-lol
+          cp -r * $out/share/darling-lol/
+
+          makeWrapper ${darlingLolFhs}/bin/darling-lol-fhs $out/bin/darling-lol-shell \
+            --add-flags "--"
+
+          makeWrapper ${darlingLolFhs}/bin/darling-lol-fhs $out/bin/darling-lol \
+            --run "cd $out/share/darling-lol" \
+            --add-flags "./scripts/run.sh"
+
+          makeWrapper ${darlingLolFhs}/bin/darling-lol-fhs $out/bin/darling-lol-installer \
+            --run "cd $out/share/darling-lol" \
+            --add-flags "./scripts/installer.sh"
+
+          makeWrapper ${darlingLolFhs}/bin/darling-lol-fhs $out/bin/darling-lol-build \
+            --run "cd $out/share/darling-lol" \
+            --add-flags "./scripts/build.sh"
+        '';
+
+        meta = with pkgs.lib; {
+          description = "Tooling and patches to run macOS League of Legends on Linux with Darling";
+          homepage = "https://github.com/lucannez64/darling-lol";
+          license = licenses.gpl3Only;
+          platforms = [ "x86_64-linux" ];
+        };
+      };
+    in
+    {
+      packages.${system} = {
+        darling-lol = darlingLol;
+        darling-lol-fhs = darlingLolFhs;
+        default = darlingLol;
+      };
+
+      apps.${system} = {
+        default = {
+          type = "app";
+          program = "${darlingLol}/bin/darling-lol";
+        };
+        shell = {
+          type = "app";
+          program = "${darlingLolFhs}/bin/darling-lol-fhs";
+        };
+        installer = {
+          type = "app";
+          program = "${darlingLol}/bin/darling-lol-installer";
+        };
+        build = {
+          type = "app";
+          program = "${darlingLol}/bin/darling-lol-build";
+        };
+      };
+
+      devShells.${system}.default = pkgs.mkShell {
+        packages = buildDeps ++ [ darlingLolFhs ];
+        shellHook = ''
+          echo "Darling LoL build & development environment loaded."
+          echo "Tip: Run 'darling-lol-fhs' to enter the FHS build sandbox if standard paths (/usr/include, /usr/lib) are needed."
+        '';
+      };
+    };
+}
