@@ -49,6 +49,7 @@ if [ "${1:-}" = "--installer" ]; then
   cat << 'EOF' > "$WORKSPACE/interactive-setup.sh"
 #!/usr/bin/env bash
 set -e
+export PATH="$(pwd)/usr-local/bin:/usr/local/bin:$PATH"
 echo "=========================================================="
 echo "   League of Legends macOS runner via Darling (NixOS)     "
 echo "=========================================================="
@@ -58,31 +59,42 @@ echo "Prefix:    ${DPREFIX:-$HOME/.darling}"
 echo "Display:   ${DISPLAY}"
 echo ""
 
-if ! command -v darling >/dev/null 2>&1; then
-  echo "Darling runtime is not yet built/installed."
-  echo "Step 1 will build Darling with LoL patches."
-  echo "Note: Shallow clone enabled. Compiling Darling requires ~40-50GB disk."
-  echo ""
-  read -p "Would you like to start the build now? [Y/n] " -n 1 -r
-  echo
-  if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
-    if ! ./scripts/build.sh; then
-      echo ""
-      echo "Build failed! See error output above."
-      read -p "Press Enter to exit..."
-      exit 1
-    fi
+if [ ! -f "$(pwd)/usr-local/bin/darling" ] || [ "$(stat -c '%u:%a' "$(pwd)/usr-local/bin/darling" 2>/dev/null)" != "0:4755" ]; then
+  if [ ! -f "$(pwd)/usr-local/bin/darling" ]; then
+    echo "Darling runtime is not yet built/installed."
+    echo "Step 1 will build Darling with LoL patches."
+    echo "Note: Compiling Darling requires ~40-50GB disk."
     echo ""
-    echo "Installing base runtime to /usr/local..."
-    mkdir -p /usr/local
-    cmake --install build/darling-src/build
-    # Fix loader interpreter for unprivileged FHS execution
-    find /usr/local/ -type f -exec patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 {} + 2>/dev/null || true
-    ./scripts/install-runtime.sh
-  else
-    echo "Aborted."
-    exit 0
+    read -p "Would you like to start the build now? [Y/n] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+      if ! ./scripts/build.sh; then
+        echo ""
+        echo "Build failed! See error output above."
+        read -p "Press Enter to exit..."
+        exit 1
+      fi
+      echo ""
+      echo "Installing base runtime to /usr/local..."
+      mkdir -p /usr/local
+      cmake --install build/darling-src/build
+      # Fix loader interpreter for unprivileged FHS execution
+      find /usr/local/ -type f -exec patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 {} + 2>/dev/null || true
+    else
+      echo "Aborted."
+      exit 0
+    fi
   fi
+
+  if [ "$(stat -c '%u:%a' "$(pwd)/usr-local/bin/darling" 2>/dev/null)" != "0:4755" ]; then
+    echo ""
+    echo "Darling requires setuid root to mount Linux overlayfs and create namespaces."
+    echo "Authenticating to grant setuid root permissions..."
+    sudo chown root:root "$(pwd)/usr-local/bin/darling"
+    sudo chmod 4755 "$(pwd)/usr-local/bin/darling"
+  fi
+
+  ./scripts/install-runtime.sh
 fi
 
 if [ ! -d "${DPREFIX:-$HOME/.darling}/Users/Shared/Riot Games/Riot Client.app" ]; then
@@ -107,14 +119,17 @@ if [ $# -gt 0 ]; then
 fi
 
 # Check if Darling & Riot client are already installed
-if [ -e "$RIOT_CLIENT" ] || [ -d "$SHARED_CLIENT" ]; then
-  exec "$FHS_BIN" ./scripts/run.sh
+if [ -e "$DARLING_PREFIX/bin/darling" ] || [ -e "/usr/local/bin/darling" ] || [ -e "$WORKSPACE/usr-local/bin/darling" ]; then
+  if [ -e "$RIOT_CLIENT" ] || [ -d "$SHARED_CLIENT" ]; then
+    exec "$FHS_BIN" ./scripts/run.sh
+  fi
 fi
 
 # Otherwise, prompt the user in a terminal to run setup/installer
 cat << 'EOF' > "$WORKSPACE/interactive-setup.sh"
 #!/usr/bin/env bash
 set -e
+export PATH="$(pwd)/usr-local/bin:/usr/local/bin:$PATH"
 echo "=========================================================="
 echo "   League of Legends macOS runner via Darling (NixOS)     "
 echo "=========================================================="
@@ -124,31 +139,42 @@ echo "Prefix:    ${DPREFIX:-$HOME/.darling}"
 echo "Display:   ${DISPLAY}"
 echo ""
 
-if ! command -v darling >/dev/null 2>&1; then
-  echo "Darling runtime is not yet built/installed."
-  echo "Step 1 will build Darling with LoL patches."
-  echo "Note: Shallow clone enabled. Compiling Darling requires ~40-50GB disk."
-  echo ""
-  read -p "Would you like to start the build now? [Y/n] " -n 1 -r
-  echo
-  if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
-    if ! ./scripts/build.sh; then
-      echo ""
-      echo "Build failed! See error output above."
-      read -p "Press Enter to exit..."
-      exit 1
-    fi
+if [ ! -f "$(pwd)/usr-local/bin/darling" ] || [ "$(stat -c '%u:%a' "$(pwd)/usr-local/bin/darling" 2>/dev/null)" != "0:4755" ]; then
+  if [ ! -f "$(pwd)/usr-local/bin/darling" ]; then
+    echo "Darling runtime is not yet built/installed."
+    echo "Step 1 will build Darling with LoL patches."
+    echo "Note: Compiling Darling requires ~40-50GB disk."
     echo ""
-    echo "Installing base runtime to /usr/local..."
-    mkdir -p /usr/local
-    cmake --install build/darling-src/build
-    # Fix loader interpreter for unprivileged FHS execution
-    find /usr/local/ -type f -exec patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 {} + 2>/dev/null || true
-    ./scripts/install-runtime.sh
-  else
-    echo "Aborted."
-    exit 0
+    read -p "Would you like to start the build now? [Y/n] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+      if ! ./scripts/build.sh; then
+        echo ""
+        echo "Build failed! See error output above."
+        read -p "Press Enter to exit..."
+        exit 1
+      fi
+      echo ""
+      echo "Installing base runtime to /usr/local..."
+      mkdir -p /usr/local
+      cmake --install build/darling-src/build
+      # Fix loader interpreter for unprivileged FHS execution
+      find /usr/local/ -type f -exec patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 {} + 2>/dev/null || true
+    else
+      echo "Aborted."
+      exit 0
+    fi
   fi
+
+  if [ "$(stat -c '%u:%a' "$(pwd)/usr-local/bin/darling" 2>/dev/null)" != "0:4755" ]; then
+    echo ""
+    echo "Darling requires setuid root to mount Linux overlayfs and create namespaces."
+    echo "Authenticating to grant setuid root permissions..."
+    sudo chown root:root "$(pwd)/usr-local/bin/darling"
+    sudo chmod 4755 "$(pwd)/usr-local/bin/darling"
+  fi
+
+  ./scripts/install-runtime.sh
 fi
 
 if [ ! -d "${DPREFIX:-$HOME/.darling}/Users/Shared/Riot Games/Riot Client.app" ]; then
