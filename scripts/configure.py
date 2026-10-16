@@ -17,7 +17,14 @@ build=ROOT/'build';build.mkdir(exist_ok=True)
 folder=build/'runtime/tools';folder.mkdir(parents=True,exist_ok=True)
 for source in (ROOT/'tools').iterdir():
     if not source.is_file():continue
-    target=folder/source.name;target.write_text(render(source.read_text(),c));os.chmod(target,source.stat().st_mode & 0o777)
+    target=folder/source.name
+    if target.exists():
+        try:
+            target.unlink()
+        except OSError:
+            pass
+    target.write_text(render(source.read_text(),c))
+    os.chmod(target,source.stat().st_mode & 0o777)
 link=folder.parent/'build'
 if not link.exists():link.symlink_to(build,target_is_directory=True)
 print('Configured',len(list(folder.iterdir())),'runtime sources for',c['guest_home'])

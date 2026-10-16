@@ -132,29 +132,6 @@
 
         nativeBuildInputs = [
           pkgs.makeWrapper
-          pkgs.copyDesktopItems
-        ];
-
-        desktopItems = [
-          (pkgs.makeDesktopItem {
-            name = "darling-lol";
-            desktopName = "League of Legends";
-            genericName = "MOBA Game";
-            comment = "Play League of Legends macOS client on Linux via Darling";
-            exec = "darling-lol";
-            icon = "darling-lol";
-            terminal = false;
-            categories = [
-              "Game"
-            ];
-            startupWMClass = "RiotClientServices";
-            keywords = [
-              "League"
-              "LoL"
-              "Riot"
-              "Darling"
-            ];
-          })
         ];
 
         installPhase = ''
@@ -180,10 +157,20 @@
             --run "cd \''${XDG_DATA_HOME:-\$HOME/.local/share}/darling-lol" \
             --add-flags "./scripts/build.sh"
 
-          # Install desktop items directly
-          for desktopItem in $desktopItems; do
-            cp "$desktopItem/share/applications"/* "$out/share/applications/"
-          done
+          cat << 'DESKTOP_EOF' > $out/share/applications/darling-lol.desktop
+[Desktop Entry]
+Categories=Game;
+Comment=Play League of Legends macOS client on Linux via Darling
+Exec=darling-lol
+GenericName=MOBA Game
+Icon=darling-lol
+Keywords=League;LoL;Riot;Darling;
+Name=League of Legends
+StartupWMClass=RiotClientServices
+Terminal=false
+Type=Application
+Version=1.5
+DESKTOP_EOF
 
           runHook postInstall
         '';

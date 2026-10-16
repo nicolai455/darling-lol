@@ -18,6 +18,8 @@ for item in docs patches research scripts tests tools upstream LICENSE NOTICE.md
     cp -rn "$SHARE_DIR/$item" "$WORKSPACE/" 2>/dev/null || true
   fi
 done
+# Ensure all files and directories in workspace are writable by the user
+chmod -R u+rwX "$WORKSPACE" 2>/dev/null || true
 
 cd "$WORKSPACE"
 
@@ -63,7 +65,12 @@ if ! command -v darling >/dev/null 2>&1; then
   read -p "Would you like to start the build now? [Y/n] " -n 1 -r
   echo
   if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
-    ./scripts/build.sh
+    if ! ./scripts/build.sh; then
+      echo ""
+      echo "Build failed! See error output above."
+      read -p "Press Enter to exit..."
+      exit 1
+    fi
     echo ""
     echo "Installing base runtime with cmake..."
     if [ -w /usr/local ]; then
@@ -126,7 +133,12 @@ if ! command -v darling >/dev/null 2>&1; then
   read -p "Would you like to start the build now? [Y/n] " -n 1 -r
   echo
   if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
-    ./scripts/build.sh
+    if ! ./scripts/build.sh; then
+      echo ""
+      echo "Build failed! See error output above."
+      read -p "Press Enter to exit..."
+      exit 1
+    fi
     echo ""
     echo "Installing base runtime with cmake..."
     if [ -w /usr/local ]; then
