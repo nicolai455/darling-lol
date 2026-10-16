@@ -7,6 +7,11 @@ FHS_BIN="@FHS_BIN@"
 
 mkdir -p "$WORKSPACE"
 
+# Ensure DISPLAY defaults to :0 on modern Wayland/Xwayland if unset
+export DISPLAY="${DISPLAY:-:0}"
+export EGL_PLATFORM="${EGL_PLATFORM:-x11}"
+export DPREFIX="${DPREFIX:-$HOME/.darling}"
+
 # Sync tooling scripts and upstream definitions into mutable user workspace
 for item in docs patches research scripts tests tools upstream LICENSE NOTICE.md README.md requirements.txt; do
   if [ -e "$SHARE_DIR/$item" ]; then
@@ -16,8 +21,7 @@ done
 
 cd "$WORKSPACE"
 
-DARLING_PREFIX="${DPREFIX:-$HOME/.darling}"
-DARLING_BIN="/usr/local/bin/darling"
+DARLING_PREFIX="$DPREFIX"
 RIOT_CLIENT="$DARLING_PREFIX/Applications/Riot Client.app"
 SHARED_CLIENT="$DARLING_PREFIX/Users/Shared/Riot Games/Riot Client.app"
 
@@ -56,20 +60,26 @@ echo "=========================================================="
 echo ""
 echo "Workspace: $(pwd)"
 echo "Prefix:    ${DPREFIX:-$HOME/.darling}"
+echo "Display:   ${DISPLAY}"
 echo ""
 
 if ! command -v darling >/dev/null 2>&1; then
   echo "Darling runtime is not yet built/installed."
   echo "Step 1 will build Darling with LoL patches."
-  echo "Note: This clones Darling submodules and compiles (~50GB disk)."
+  echo "Note: Shallow clone enabled. Compiling Darling requires ~40-50GB disk."
   echo ""
   read -p "Would you like to start the build now? [Y/n] " -n 1 -r
   echo
   if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
     ./scripts/build.sh
     echo ""
-    echo "Installing base runtime to /usr/local (requires sudo inside FHS)..."
-    sudo cmake --install build/darling-src/build
+    echo "Installing base runtime with cmake..."
+    if [ -w /usr/local ]; then
+      cmake --install build/darling-src/build
+    else
+      echo "Elevating privileges for /usr/local installation..."
+      sudo cmake --install build/darling-src/build
+    fi
     ./scripts/install-runtime.sh
   else
     echo "Aborted."
@@ -86,7 +96,7 @@ if [ ! -d "${DPREFIX:-$HOME/.darling}/Users/Shared/Riot Games/Riot Client.app" ]
 fi
 
 echo ""
-echo "Setup complete! You can now launch League of Legends from your application menu."
+echo "Setup complete! You can now launch League of Legends from your application menu (Vicinae)."
 read -p "Press Enter to exit..."
 EOF
 chmod +x "$WORKSPACE/interactive-setup.sh"

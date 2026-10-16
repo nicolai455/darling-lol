@@ -26,7 +26,10 @@ def previous_patches(component):
 if not (source/'.git').exists():
     if a.check_only:p.error('check-only requires an existing pinned source checkout')
     source.parent.mkdir(parents=True,exist_ok=True)
-    run(['git','clone',manifest['upstream'],str(source)])
+    try:
+        run(['git','clone','--depth','1','--branch','master',manifest['upstream'],str(source)])
+    except subprocess.CalledProcessError:
+        run(['git','clone',manifest['upstream'],str(source)])
     run(['git','-C',str(source),'checkout','--detach',manifest['revision']])
     # Recursive initialization can spend a long time fetching nested repos (and
     # Git LFS assets). Explicit progress keeps the last completed submodule
@@ -35,8 +38,15 @@ if not (source/'.git').exists():
     # fetch that submodule's LFS objects from GitHub, which still serves them;
     # otherwise the checkout blocks on the dead host right after sqlite.
     print('Initializing Darling submodules (large repositories/LFS assets may take a while)...',flush=True)
-    run(['git','-C',str(source),'-c','lfs.url=https://github.com/darlinghq/darling-swift.git/info/lfs',
-         'submodule','update','--init','--recursive','--progress'])
+    # Retry loop in case network interrupts submodule or LFS download
+    for attempt in range(1, 4):
+        try:
+            run(['git','-C',str(source),'-c','lfs.url=https://github.com/darlinghq/darling-swift.git/info/lfs',
+                 'submodule','update','--init','--recursive','--depth','1','--progress'])
+            break
+        except subprocess.CalledProcessError:
+            if attempt == 3: raise
+            print(f'Submodule fetch interrupted (attempt {attempt}/3). Retrying...', flush=True)
     print('Darling submodules initialized.',flush=True)
 # Never reset someone else's checkout to make a patch apply.
 for component in manifest['components']:
