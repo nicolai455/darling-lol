@@ -130,26 +130,77 @@
         version = "0.1.0";
         src = ./.;
 
-        nativeBuildInputs = [ pkgs.makeWrapper ];
+        nativeBuildInputs = [
+          pkgs.makeWrapper
+          pkgs.copyDesktopItems
+        ];
+
+        desktopItems = [
+          (pkgs.makeDesktopItem {
+            name = "darling-lol";
+            desktopName = "League of Legends";
+            genericName = "MOBA Game";
+            comment = "Play League of Legends macOS client on Linux via Darling";
+            exec = "darling-lol";
+            icon = "darling-lol";
+            terminal = false;
+            categories = [
+              "Game"
+            ];
+            startupWMClass = "RiotClientServices";
+            keywords = [
+              "League"
+              "LoL"
+              "Riot"
+              "Darling"
+            ];
+          })
+          (pkgs.makeDesktopItem {
+            name = "darling-lol-installer";
+            desktopName = "League of Legends Installer (Darling)";
+            genericName = "Game Installer";
+            comment = "Setup or install League of Legends via Darling";
+            exec = "darling-lol-installer";
+            icon = "darling-lol";
+            terminal = true;
+            categories = [
+              "Game"
+            ];
+            keywords = [
+              "League"
+              "LoL"
+              "Riot"
+              "Darling"
+              "Installer"
+            ];
+          })
+        ];
 
         installPhase = ''
-          mkdir -p $out/bin $out/share/darling-lol
+          runHook preInstall
+
+          mkdir -p $out/bin $out/share/darling-lol $out/share/icons/hicolor/scalable/apps
           cp -r * $out/share/darling-lol/
+          cp darling-lol.svg $out/share/icons/hicolor/scalable/apps/darling-lol.svg
+
+          # Install configured launcher
+          substitute ./darling-lol-launcher.sh $out/bin/darling-lol \
+            --replace-fail "@SHARE_DIR@" "$out/share/darling-lol" \
+            --replace-fail "@FHS_BIN@" "${darlingLolFhs}/bin/darling-lol-fhs"
+          chmod +x $out/bin/darling-lol
 
           makeWrapper ${darlingLolFhs}/bin/darling-lol-fhs $out/bin/darling-lol-shell \
             --add-flags "--"
 
-          makeWrapper ${darlingLolFhs}/bin/darling-lol-fhs $out/bin/darling-lol \
-            --run "cd $out/share/darling-lol" \
-            --add-flags "./scripts/run.sh"
-
           makeWrapper ${darlingLolFhs}/bin/darling-lol-fhs $out/bin/darling-lol-installer \
-            --run "cd $out/share/darling-lol" \
+            --run "cd \''${XDG_DATA_HOME:-\$HOME/.local/share}/darling-lol" \
             --add-flags "./scripts/installer.sh"
 
           makeWrapper ${darlingLolFhs}/bin/darling-lol-fhs $out/bin/darling-lol-build \
-            --run "cd $out/share/darling-lol" \
+            --run "cd \''${XDG_DATA_HOME:-\$HOME/.local/share}/darling-lol" \
             --add-flags "./scripts/build.sh"
+
+          runHook postInstall
         '';
 
         meta = with pkgs.lib; {
