@@ -34,7 +34,14 @@ darling shell env DYLD_FRAMEWORK_PATH=/Users/me/RuntimeFrameworks \
   /Volumes/SystemRoot/path/to/darling-lol/build/riot-coretext-font-list-check
 darling shell env DYLD_FRAMEWORK_PATH=/Users/me/RuntimeFrameworks \
   /Volumes/SystemRoot/path/to/darling-lol/build/riot-window-layout-check
+darling shell env DYLD_FRAMEWORK_PATH=/Users/me/RuntimeFrameworks \
+  /Volumes/SystemRoot/path/to/darling-lol/build/riot-display-modes-check
 ```
+
+`riot-display-modes-check` (built by `build-riot-display-modes-check.py`) expects `DISPLAY_MODES_CHECK pass=1`. It checks two things for the main display, display 0 and an unknown display:
+
+- `CGDisplayCopyAllDisplayModes` never returns NULL. League passes the id from `[[window screen] deviceDescription]` (0 while the window is off every screen) straight to `CFArrayGetCount`, and NULL crashed it.
+- `CGDisplayScreenSize` returns a nonzero size (`SCREEN_SIZE ... pass=1`). It returned 0×0 for any display with EDID. League divides by this size for its camera aspect ratio, so the view-projection matrix's x row became NaN and every 3D vertex was discarded. The scene then showed only its blue clear colour, and world clicks did nothing. This was found with a RenderDoc capture and vertex shader debugging.
 
 Expected: `CORETEXT_FONT_LIST pass=1` with nonzero family/face counts (306/1124 on the development host), `VIEW_LAYER_RESIZE initial=1600x900 pass=1`, `NATIVE_RESIZE_ORDER size=1600x900 pass=1` `CONTENT_SIBLING_RESIZE ... pass=1` and `WINDOW_LAYOUT_CHECK ... pass=1`.
 
@@ -82,7 +89,7 @@ Useful probes (build tokenized Python helpers from `build/runtime/tools/`):
 - `riot-event-coalescing-check`: preserve key events and latest mouse motion.
 - `m327-cgl-resolver-check`: first calls through dynamically looked-up GL functions retain floating-point arguments; expected `first_sampler_linear=1 first_color_arguments=1 errors=0,0`. Build with `build-m58f327-opengl.py` and run with `run-riot-native-check.py m327-cgl-resolver-check`.
 - `m327-cgl-direct-check`: with `RCLOL_GPU_DIRECT_OTHER_WINDOW_TEST=1` and an owned 337x339 native target, interleave 338x339 fallback surfaces; expected `active_presenter_preserved=1 fallback_frames=357`. This needs the native presentation fixture; it is not a `run-riot-native-check.py` choice.
-- `riot-metal-presentation-check`: Vulkan clear reaches the GL texture, including late window/context attachment.
+- `riot-metal-presentation-check`: Vulkan clear reaches the GL texture, including late window/context attachment. Set `RIOT_PRESENTATION_NESTED=1` to place the Metal layer beneath two ordinary layers and verify that its drawables are still presented and recycled past the three-drawable pool limit.
 - `riot-metal-concurrency-check`: submission ordering, resource lifetime and concurrent recording.
 
 `RIOT_PRESENTATION_STRESS=1` makes the presentation probe run 120 frames. With the game and clients closed, force async encoding for this standalone probe using the guest flag `/tmp/metal-async-encode`, then remove it. The tested old path leaked 120 synchronization FDs over 120 frames; the fixed path leaked zero. Inspect the probe's host `/proc/PID/fd` for `anon_inode:syncobj_file` if reproducing that test.
@@ -412,3 +419,38 @@ and exercises 100 cancellations with both retained and early-released caller
 references, without launching or inspecting Riot. A failure prints
 `CFHOST_CANCEL_CHECK fail stage=...`; `unexpected-callback` means a completed
 lookup arrived instead of the cancellation.
+
+## Primary-monitor geometry regression
+
+After preparing the sources and configuring/building Darling, run:
+
+```sh
+python3 scripts/prepare.py --check-only
+python3 tools/check-x11-display-geometry.py
+cc -std=c11 -Wall -Wextra -Werror tools/test-x11-relative-mouse.c -o build/test-x11-relative-mouse
+build/test-x11-relative-mouse
+```
+
+The native probe requires the existing per-user AppKit and CoreGraphics overlays
+and a running X11/Xwayland display. It rebuilds the changed X11 and CoreGraphics
+objects and tests them in a temporary framework overlay, without installing them.
+Seven `DISPLAY_GEOMETRY ...=pass` lines are required; full output is saved in
+`build/pr12-display-check.log`.
+
+It checks the live primary screen's origin, synthetic single-monitor and offset
+layouts (including vertically arranged screens and negative Cocoa coordinates),
+unmapped window creation/resizing, display IDs after primary-first ordering,
+CoreGraphics bounds and spatial queries, absolute and relative warp translation,
+relative deltas, both RandR cache-invalidation events, and the root-screen fallback.
+Warps are intercepted: the probe does not move the desktop pointer or send game
+input. Synthetic layouts exercise coordinate conversion and display API behavior;
+they do not simulate physical monitor hotplug or validate League rendering.
+The probe also checks that managed borderless windows covering a whole monitor
+request EWMH fullscreen, including on secondary monitors, and clear the property
+when resized before mapping. Titled windows, unmanaged popups and windows sized
+to the panel-reduced work area are excluded. Mapped-window transitions and panel
+stacking require manual verification under KDE Plasma/Xwayland. Also verify game
+launch, window placement, click alignment and edge panning before rollout.
+
+After installing the tested X11 and CoreGraphics binaries locally, the user
+reported that everything was working (2026-10-16). Fullscreen policy was unchanged.

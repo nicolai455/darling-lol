@@ -12,12 +12,12 @@ make -C "$build_dir/src/external/cfnetwork/src" CFNetwork -j8
 make -C "$build_dir/src/external/configd/SystemConfiguration.fproj" SystemConfiguration -j8
 make -C "$build_dir/src/external/cocotron/QuartzCore" QuartzCore -j8
 make -C "$build_dir/src/external/cocotron/AppKit" AppKit X11_backend -j8
-cc -shared -fPIC -O2 -Wall -Wextra \
+cc -shared -fPIC -O3 -march=native -mtune=generic -Wall -Wextra \
   "-Wl,-soname,$project_dir/build/libdarling-xshm.so" \
   "$project_dir/tools/m58f299-xshm.c" -o "$project_dir/build/libdarling-xshm.next.so" \
   -pthread $(pkg-config --cflags --libs x11 x11-xcb xcb-shm xext)
 mkdir -p "$guest_home" "$project_dir/build"
-clang -target x86_64-apple-macosx11.0 -fuse-ld=lld -dynamiclib -nostdlib \
+clang -target x86_64-apple-macosx11.0 -fuse-ld=lld -dynamiclib -nostdlib -O3 -march=native -mtune=generic \
   -isysroot @DARLING_SDK@ \
   -I"$source_dir/src/startup/mldr/elfcalls" \
   "-DDARLING_XSHM_HOST_LIBRARY=\"$project_dir/build/libdarling-xshm.so\"" \
