@@ -67,6 +67,16 @@ if cctools_strlcpy.exists():
             'size_t strlcpy(char *dst, const char *src, size_t siz);',
             '#if !defined(__GLIBC__) || !__GLIBC_PREREQ(2, 38)\nsize_t strlcpy(char *dst, const char *src, size_t siz);\n#endif'
         ))
+
+# Ensure tools/shutdown-user.sh doesn't fail when invoked in unprivileged containers (e.g. bwrap FHS)
+shutdown_script = source / 'tools/shutdown-user.sh'
+if shutdown_script.exists():
+    txt = shutdown_script.read_text()
+    if 'command -v sudo' not in txt:
+        shutdown_script.write_text(txt.replace(
+            'if [ "$(whoami)" != "root" ]; then\n    echo "$0 must be run as root, invoking sudo"\n    exec sudo sh "$0" "$@"\nfi',
+            'if [ "$(whoami)" != "root" ]; then\n    if ! command -v sudo >/dev/null 2>&1 || ! sudo -n true 2>/dev/null; then\n        PID=$(running_pids 2>/dev/null | head -n1 || true)\n        if [ -n "$PID" ]; then darling shutdown 2>/dev/null || true; fi\n        exit 0\n    fi\n    echo "$0 must be run as root, invoking sudo"\n    exec sudo sh "$0" "$@"\nfi'
+        ))
 # Never reset someone else's checkout to make a patch apply.
 for component in manifest['components']:
     repo=source/component['path']

@@ -123,9 +123,14 @@
 
         extraOutputsToInstall = [ "dev" "out" ];
 
+        extraBwrapArgs = [
+          "--bind-try" (''$'' + ''{HOME}/.local/share/darling-lol/usr-local'') "/usr-local"
+        ];
+
         extraBuildCommands = ''
           mkdir -p bin usr/bin
           rm -f bin/clang bin/clang++ usr/bin/clang usr/bin/clang++
+          ln -sfn /usr-local $out/usr/local
           cat << 'EOF' > usr/bin/clang
 #!/usr/bin/env bash
 is_darwin=0
@@ -167,8 +172,9 @@ EOF
           export DPREFIX="''${DPREFIX:-$HOME/.darling}"
           export LC_ALL=C.UTF-8
           export LANG=C.UTF-8
-          export PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/lib64/pkgconfig:/usr/share/pkgconfig:''${PKG_CONFIG_PATH:-}"
-          export CMAKE_PREFIX_PATH="/usr:/usr/lib/cmake/llvm:''${CMAKE_PREFIX_PATH:-}"
+          export PATH="/usr/local/bin:''${PATH:-}"
+          export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:/usr/local/share/pkgconfig:/usr/lib/pkgconfig:/usr/lib64/pkgconfig:/usr/share/pkgconfig:''${PKG_CONFIG_PATH:-}"
+          export CMAKE_PREFIX_PATH="/usr/local:/usr:/usr/lib/cmake/llvm:''${CMAKE_PREFIX_PATH:-}"
           unset NIX_LDFLAGS NIX_CFLAGS_COMPILE NIX_HARDENING_ENABLE CPATH LIBRARY_PATH
         '';
 

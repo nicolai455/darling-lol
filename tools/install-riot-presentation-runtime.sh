@@ -16,6 +16,7 @@ cc -shared -fPIC -O2 -Wall -Wextra \
   "-Wl,-soname,$project_dir/build/libdarling-xshm.so" \
   "$project_dir/tools/m58f299-xshm.c" -o "$project_dir/build/libdarling-xshm.next.so" \
   -pthread $(pkg-config --cflags --libs x11 x11-xcb xcb-shm xext)
+mkdir -p "$guest_home" "$project_dir/build"
 clang -target x86_64-apple-macosx11.0 -fuse-ld=lld -dynamiclib -nostdlib \
   -isysroot @DARLING_SDK@ \
   -I"$source_dir/src/startup/mldr/elfcalls" \
@@ -23,7 +24,9 @@ clang -target x86_64-apple-macosx11.0 -fuse-ld=lld -dynamiclib -nostdlib \
   -Wl,-undefined,dynamic_lookup -Wl,-install_name,@GUEST_HOME@/libDarlingXShm.dylib \
   "$project_dir/tools/m58f299-native-wrapper.c" -o "$guest_home/libDarlingXShm.next.dylib"
 # Stop before changing the overlay's upper directory, even with atomic writes.
-darling shutdown || true
+if command -v darling >/dev/null 2>&1; then
+  timeout 5s darling shutdown 2>/dev/null || true
+fi
 mv "$project_dir/build/libdarling-xshm.next.so" "$project_dir/build/libdarling-xshm.so"
 mv "$guest_home/libDarlingXShm.next.dylib" "$guest_home/libDarlingXShm.dylib"
 mkdir -p "$guest_home/RuntimeFrameworks"

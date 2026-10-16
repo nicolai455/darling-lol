@@ -5,12 +5,13 @@ WORKSPACE="${XDG_DATA_HOME:-$HOME/.local/share}/darling-lol"
 SHARE_DIR="@SHARE_DIR@"
 FHS_BIN="@FHS_BIN@"
 
-mkdir -p "$WORKSPACE"
+mkdir -p "$WORKSPACE" "$WORKSPACE/usr-local"
 
 # Ensure DISPLAY defaults to :0 on modern Wayland/Xwayland if unset
 export DISPLAY="${DISPLAY:-:0}"
 export EGL_PLATFORM="${EGL_PLATFORM:-x11}"
 export DPREFIX="${DPREFIX:-$HOME/.darling}"
+export PATH="/usr/local/bin:$PATH"
 
 # Sync tooling scripts and upstream definitions into mutable user workspace
 for item in docs patches research scripts tests tools upstream LICENSE NOTICE.md README.md requirements.txt; do
@@ -72,13 +73,11 @@ if ! command -v darling >/dev/null 2>&1; then
       exit 1
     fi
     echo ""
-    echo "Installing base runtime with cmake..."
-    if [ -w /usr/local ]; then
-      cmake --install build/darling-src/build
-    else
-      echo "Elevating privileges for /usr/local installation..."
-      sudo cmake --install build/darling-src/build
-    fi
+    echo "Installing base runtime to /usr/local..."
+    mkdir -p /usr/local
+    cmake --install build/darling-src/build
+    # Fix loader interpreter for unprivileged FHS execution
+    find /usr/local/ -type f -exec patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 {} + 2>/dev/null || true
     ./scripts/install-runtime.sh
   else
     echo "Aborted."
@@ -95,8 +94,8 @@ if [ ! -d "${DPREFIX:-$HOME/.darling}/Users/Shared/Riot Games/Riot Client.app" ]
 fi
 
 echo ""
-echo "Setup complete! You can now launch League of Legends from your application menu (Vicinae)."
-read -p "Press Enter to exit..."
+echo "Setup complete! Launching League of Legends..."
+exec ./scripts/run.sh
 EOF
   chmod +x "$WORKSPACE/interactive-setup.sh"
   run_in_term "League of Legends Setup (Darling)" "$FHS_BIN" "$WORKSPACE/interactive-setup.sh"
@@ -140,13 +139,11 @@ if ! command -v darling >/dev/null 2>&1; then
       exit 1
     fi
     echo ""
-    echo "Installing base runtime with cmake..."
-    if [ -w /usr/local ]; then
-      cmake --install build/darling-src/build
-    else
-      echo "Elevating privileges for /usr/local installation..."
-      sudo cmake --install build/darling-src/build
-    fi
+    echo "Installing base runtime to /usr/local..."
+    mkdir -p /usr/local
+    cmake --install build/darling-src/build
+    # Fix loader interpreter for unprivileged FHS execution
+    find /usr/local/ -type f -exec patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 {} + 2>/dev/null || true
     ./scripts/install-runtime.sh
   else
     echo "Aborted."
@@ -163,8 +160,8 @@ if [ ! -d "${DPREFIX:-$HOME/.darling}/Users/Shared/Riot Games/Riot Client.app" ]
 fi
 
 echo ""
-echo "Setup complete! You can now launch League of Legends from your application menu (Vicinae)."
-read -p "Press Enter to exit..."
+echo "Setup complete! Launching League of Legends..."
+exec ./scripts/run.sh
 EOF
 chmod +x "$WORKSPACE/interactive-setup.sh"
 
