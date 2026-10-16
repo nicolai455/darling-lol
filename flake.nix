@@ -155,47 +155,23 @@
               "Darling"
             ];
           })
-          (pkgs.makeDesktopItem {
-            name = "darling-lol-installer";
-            desktopName = "League of Legends Installer (Darling)";
-            genericName = "Game Installer";
-            comment = "Setup or install League of Legends via Darling";
-            exec = "darling-lol-installer";
-            icon = "darling-lol";
-            terminal = false;
-            categories = [
-              "Game"
-            ];
-            keywords = [
-              "League"
-              "LoL"
-              "Riot"
-              "Darling"
-              "Installer"
-            ];
-          })
         ];
 
         installPhase = ''
           runHook preInstall
 
-          mkdir -p $out/bin $out/share/darling-lol $out/share/icons/hicolor/scalable/apps $out/share/applications
+          mkdir -p $out/bin $out/share/darling-lol $out/share/icons/hicolor/scalable/apps $out/share/icons/hicolor/128x128/apps $out/share/pixmaps $out/share/applications
           cp -r * $out/share/darling-lol/
           cp darling-lol.svg $out/share/icons/hicolor/scalable/apps/darling-lol.svg
+          cp darling-lol.png $out/share/icons/hicolor/128x128/apps/darling-lol.png
+          cp darling-lol.png $out/share/pixmaps/darling-lol.png
+          cp darling-lol.svg $out/share/pixmaps/darling-lol.svg
 
           # Install configured launcher
           substitute ./darling-lol-launcher.sh $out/bin/darling-lol \
             --replace-fail "@SHARE_DIR@" "$out/share/darling-lol" \
             --replace-fail "@FHS_BIN@" "${darlingLolFhs}/bin/darling-lol-fhs"
           chmod +x $out/bin/darling-lol
-
-          # Install standalone installer script that wraps in terminal
-          cat << 'WRAPPER_EOF' > $out/bin/darling-lol-installer
-#!/usr/bin/env bash
-set -e
-exec $out/bin/darling-lol --installer "$@"
-WRAPPER_EOF
-          chmod +x $out/bin/darling-lol-installer
 
           makeWrapper ${darlingLolFhs}/bin/darling-lol-fhs $out/bin/darling-lol-shell \
             --add-flags "--"
