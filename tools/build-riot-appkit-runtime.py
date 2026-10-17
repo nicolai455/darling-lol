@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild NSWindow's tracking dispatch against the configured AppKit build."""
+"""Build AppKit runtime overrides, panel compatibility and standalone probes."""
 from pathlib import Path
 import shlex
 import subprocess
@@ -27,7 +27,7 @@ subprocess.run(['clang', *flags['C_DEFINES'], *flags['C_INCLUDES'], *flags['C_FL
 link.append(str(compat))
 link[link.index('-o') + 1] = str(project / 'build/riot-AppKit')
 subprocess.run(link, cwd=framework, check=True)
-for name in ['riot-event-coalescing-check', 'riot-scroll-event-check', 'riot-appkit-pump-check', 'riot-window-layout-check']:
+for name in ['riot-event-coalescing-check', 'riot-scroll-event-check', 'riot-appkit-pump-check', 'riot-window-layout-check', 'riot-save-panel-tag-check']:
     probe = project / f'build/{name}.o'
     subprocess.run(['clang', *flags['C_DEFINES'], *flags['C_INCLUDES'], *flags['C_FLAGS'],
                     '-O3', '-march=native', '-mtune=generic', '-fblocks', '-Wno-macro-redefined', '-c',

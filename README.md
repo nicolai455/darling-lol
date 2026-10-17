@@ -42,7 +42,28 @@ Game files, Riot installers, account databases, tokens, local prefixes, captures
 
 Use the dependency list in the [pinned Darling source](https://github.com/darlinghq/darling/tree/60ba801decee7a00782f74f6be4c8ffb013f79ff) for your distribution. `tools/env-check.sh` provides a starting check; its legacy package names may need adapting to your distro.
 
-## Build on the other PC
+## Experimental Nix/rootless package
+
+```sh
+nix run .#installer
+nix run .#default -- --update
+nix run .#default
+nix run .#shell
+```
+
+Nix supplies the launcher/dependencies, not a prebuilt Darling or game. First
+setup is interactive and builds into the writable per-user workspace. The
+desktop entry requests a terminal; EOF stdin produces an actionable error.
+Run updates only after manually closing the clients and shutting Darling down
+in the original namespace. A live prefix marker blocks a second launch rather
+than killing or attempting to reconnect. One workspace/foreground namespace is
+supported at a time. Readiness is per canonical prefix, configured guest and
+compatible package/runtime/source identity. Store closure roots are retained
+for mutable binaries; do not delete `build/nix-gcroots/` while using them.
+Fresh Darling/game acceptance has not been performed for this package repair.
+See [Nix setup and operational limits](docs/SETUP.md#nixos-package).
+
+## Build on the other PC (non-Nix)
 
 ```sh
 git clone https://github.com/lucannez64/darling-lol.git

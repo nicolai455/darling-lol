@@ -27,7 +27,42 @@ python3 build/runtime/tools/build-riot-coretext-runtime.py
 python3 build/runtime/tools/build-riot-appkit-runtime.py
 ```
 
-After installing and activating the runtime with both clients and the game closed, run the standalone probes (replace `me` and the checkout path):
+### File-panel tag compatibility
+
+The AppKit builder also builds `riot-save-panel-tag-check`. Once the updated
+AppKit is active, run it with the existing bounded runner:
+
+```sh
+python3 build/runtime/tools/run-riot-native-check.py riot-save-panel-tag-check
+```
+
+Expected: both `SAVE_PANEL_TAG class=NSSavePanel ... pass=1` and
+`SAVE_PANEL_TAG class=NSOpenPanel ... pass=1`, then `SAVE_PANEL_TAG_CHECK pass=1`.
+It checks availability and inherited implementations of `setShowsTagField:`,
+`showsTagField`, `setTagNames:` and `tagNames`; both BOOL setter values and
+nonempty, empty and nil tag arrays must leave the getters at `NO` and a non-nil
+empty array. The executable links AppKit, not a private copy of the shim.
+It allocates bare panel instances without window/nib/display initialization:
+this is a stateless method-dispatch check, not a panel lifecycle or GUI test.
+Compile/link success alone does not establish that it passes at runtime.
+
+Finder tags remain unsupported: setters discard state; this intentionally
+differs from macOS's default `showsTagField=YES` and retained initial tag names.
+The undocumented `showsTags`/`setShowsTags:` pair is not implemented.
+API references: [showsTagField](https://developer.apple.com/documentation/appkit/nssavepanel/showstagfield)
+and [tagNames](https://developer.apple.com/documentation/appkit/nssavepanel/tagnames).
+
+Separately, manually open Riot's installation-path picker, cancel it, reopen it,
+select a directory and accept, and verify that Riot displays/uses that selected
+path without crashing. Record actual outcomes; neither this probe nor a client
+launch or past game session verifies that interaction. Do this only in a
+coordinated idle session; do not interrupt a running client/game to install or
+test the change.
+
+### Other standalone probes
+
+After installing and activating the runtime with both clients and the game
+closed, run these probes (replace `me` and the checkout path):
 
 ```sh
 darling shell env DYLD_FRAMEWORK_PATH=/Users/me/RuntimeFrameworks \

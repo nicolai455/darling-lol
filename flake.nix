@@ -45,6 +45,7 @@
         flex
         git
         git-lfs
+        nix
         curl
         unzip
         file
@@ -234,12 +235,13 @@ EOF
             --replace-fail "@FHS_BIN@" "${darlingLolFhs}/bin/darling-lol-fhs" \
             --replace-fail "@UNSHARE_BIN@" "${pkgs.util-linux}/bin/unshare"
           chmod +x $out/bin/darling-lol
+          wrapProgram $out/bin/darling-lol --prefix PATH : ${pkgs.lib.makeBinPath [ pythonEnv pkgs.coreutils pkgs.util-linux pkgs.gawk ]}
 
           makeWrapper $out/bin/darling-lol $out/bin/darling-lol-installer \
             --add-flags "--installer"
 
           makeWrapper $out/bin/darling-lol $out/bin/darling-lol-shell \
-            --add-flags "bash"
+            --add-flags "--shell"
 
           makeWrapper $out/bin/darling-lol $out/bin/darling-lol-build \
             --add-flags "./scripts/build.sh"
@@ -254,7 +256,7 @@ Icon=darling-lol
 Keywords=League;LoL;Riot;Darling;
 Name=League of Legends
 StartupWMClass=RiotClientServices
-Terminal=false
+Terminal=true
 Type=Application
 Version=1.5
 DESKTOP_EOF
@@ -271,6 +273,21 @@ DESKTOP_EOF
       };
     in
     {
+      checks.${system}.packaging = pkgs.runCommand "darling-lol-packaging-tests" {
+        nativeBuildInputs = [ pythonEnv pkgs.bash pkgs.git pkgs.coreutils pkgs.util-linux pkgs.gawk ];
+      } ''
+        cp -R ${darlingLol}/share/darling-lol source
+        chmod -R u+w source
+        cd source
+        export HOME="$TMPDIR/home" PYTHONDONTWRITEBYTECODE=1
+        mkdir -p "$HOME"
+        # Tests use private stub binaries/repositories, never Darling itself.
+        python3 -m unittest discover -s tests -v
+        python3 scripts/validate.py
+        grep -q '^Terminal=true$' ${darlingLol}/share/applications/darling-lol.desktop
+        touch "$out"
+      '';
+
       packages.${system} = {
         darling-lol = darlingLol;
         darling-lol-fhs = darlingLolFhs;

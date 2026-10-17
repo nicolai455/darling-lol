@@ -18,6 +18,8 @@ class LauncherTests(unittest.TestCase):
         self.share = self.folder / 'share'
         (self.share / 'scripts').mkdir(parents=True)
         (self.share / 'scripts/run.sh').write_text('new packaged script\n')
+        import shutil
+        shutil.copy(ROOT / 'scripts/nix-copy.py', self.share / 'scripts/nix-copy.py')
         self.workspace = self.home / '.local/share/darling-lol'
         self.log = self.folder / 'calls'
         self.bin = self.folder / 'bin'
@@ -63,7 +65,7 @@ class LauncherTests(unittest.TestCase):
     def test_setup_never_makes_a_user_writable_runtime_setuid(self):
         result = self.launch('--installer')
         self.assertEqual(result.returncode, 0, result.stderr)
-        setup = (self.workspace / 'interactive-setup.sh').read_text()
+        setup = (ROOT / 'scripts/nix-session.sh').read_text() + (ROOT / 'scripts/update.sh').read_text().split('if [ ! -d build/darling-src/build ]; then')[0]
         self.assertNotIn('    sudo ', setup)
         self.assertNotIn('\nsudo ', setup)
         self.assertNotIn('chmod 4755', setup)

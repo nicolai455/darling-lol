@@ -16,6 +16,7 @@ checks = {
     "riot-running-application-check": "RUNNING_APP",
     "riot-task-info-check": "TASK_INFO",
     "riot-appkit-pump-check": "APPKIT_PUMP",
+    "riot-save-panel-tag-check": "SAVE_PANEL_TAG_CHECK",
     "riot-event-coalescing-check": "EVENT_COALESCING",
     "riot-scroll-event-check": "SCROLL_",
     "riot-pthread-integrity-check": "PTHREAD_INTEGRITY",

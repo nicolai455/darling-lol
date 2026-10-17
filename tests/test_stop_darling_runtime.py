@@ -138,6 +138,31 @@ class StopRuntimeTests(unittest.TestCase):
         self.assertEqual(len(self.calls), 1)
         self.assertEqual(self.signals, [])
 
+    def test_timeout_does_not_authorize_live_server_replacement(self):
+        self.server()
+        def timeout():
+            raise subprocess.TimeoutExpired(['darling', 'shutdown'], 10)
+        self.shutdown = timeout
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.run_script()
+        self.assertEqual(self.signals, [])
+
+    def test_timeout_is_conservatively_rejected_even_if_server_exited(self):
+        self.server()
+        def timeout_after_exit():
+            self.status(100, 'Z')
+            raise subprocess.TimeoutExpired(['darling', 'shutdown'], 10)
+        self.shutdown = timeout_after_exit
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.run_script()
+        self.assertEqual(self.signals, [])
+
+    def test_unrelated_prefix_helper_is_not_signalled(self):
+        self.process(101, riot=True)
+        (self.proc / '101/maps').write_text('/unrelated prefix/Applications/Riot Client.app/helper')
+        self.run_script()
+        self.assertEqual(self.signals, [])
+
     def test_permission_error_is_not_treated_as_exit(self):
         self.server()
         self.status_error = PermissionError(errno.EACCES, 'Permission denied')

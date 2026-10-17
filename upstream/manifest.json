@@ -313,6 +313,11 @@
       "patch": "patches/cfnetwork.patch",
       "modified_files": 1,
       "new_files": []
+    },
+    {
+      "path": "src/external/cctools-port",
+      "revision": "d9456c221e1f462e17c0b3297748bc089d5a861e",
+      "patch": "patches/cctools-port.patch"
     }
   ],
   "omitted": [

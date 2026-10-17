@@ -39,6 +39,10 @@ with open({str(log)!r}, "a") as output:
         prefix = folder / "prefix"
         (prefix / "Applications/Riot Client.app").mkdir(parents=True)
         env["DPREFIX"] = str(prefix)
+        env.pop("RIOT_GUEST_HOME", None)
+        (folder / "runtime-paths.sh").write_text(
+            (ROOT / "tools/runtime-paths.sh").read_text()
+            .replace("@DPREFIX@", str(prefix)).replace("@GUEST_HOME@", "/Users/offline-check"))
         env["DYLD_INSERT_LIBRARIES"] = "/Users/offline-check/zzlogdir.dylib:/tmp/inherited.dylib"
         env["RCLOL_APP_ARGS"] = "--inherited-shim-argument"
         env["RCLOL_APP_ARG2"] = "--inherited-shim-argument-2"

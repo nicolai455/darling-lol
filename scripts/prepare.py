@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Fetch pinned Darling sources and apply each patch to its owning repository."""
-import argparse,json,os,subprocess,tempfile
+import argparse,json,os,subprocess,tempfile,sys
 from pathlib import Path
+# --check-only must not create import caches in the source package either.
+sys.dont_write_bytecode=True
 from common import ROOT,render
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--source',type=Path,default=ROOT/'build/darling-src')
@@ -25,58 +27,27 @@ def previous_patches(component):
         if shown.returncode==0:yield render(shown.stdout)
 if not (source/'.git').exists():
     if a.check_only:p.error('check-only requires an existing pinned source checkout')
+    if source.exists():p.error('refusing non-checkout destination; choose an empty source path')
     source.parent.mkdir(parents=True,exist_ok=True)
-    try:
-        run(['git','clone','--depth','1','--branch','master',manifest['upstream'],str(source)])
-    except subprocess.CalledProcessError:
-        run(['git','clone',manifest['upstream'],str(source)])
-    run(['git','-C',str(source),'checkout','--detach',manifest['revision']])
-    # Recursive initialization can spend a long time fetching nested repos (and
-    # Git LFS assets). Explicit progress keeps the last completed submodule
-    # from looking like the operation that is currently stuck. The pinned
-    # darling-swift .lfsconfig points at the retired git-lfs.darlinghq.org, so
-    # fetch that submodule's LFS objects from GitHub, which still serves them;
-    # otherwise the checkout blocks on the dead host right after sqlite.
-    print('Initializing Darling submodules (large repositories/LFS assets may take a while)...',flush=True)
-    # Retry loop in case network interrupts submodule or LFS download
-    for attempt in range(1, 4):
-        try:
-            run(['git','-C',str(source),'-c','lfs.url=https://github.com/darlinghq/darling-swift.git/info/lfs',
-                 'submodule','update','--init','--recursive','--depth','1','--progress'])
-            break
-        except subprocess.CalledProcessError:
-            if attempt == 3: raise
-            print(f'Submodule fetch interrupted (attempt {attempt}/3). Retrying...', flush=True)
-    print('Darling submodules initialized.',flush=True)
+    # Fetch the exact pin, not today's master. Publish only a complete checkout;
+    # failed downloads are removed without touching an existing user checkout.
+    with tempfile.TemporaryDirectory(prefix='darling-clone-',dir=source.parent) as temporary:
+        checkout=Path(temporary)/'source'
+        run(['git','init',str(checkout)])
+        run(['git','-C',str(checkout),'remote','add','origin',manifest['upstream']])
+        run(['git','-C',str(checkout),'fetch','--depth','1','origin',manifest['revision']])
+        run(['git','-C',str(checkout),'checkout','--detach','FETCH_HEAD'])
+        print('Initializing Darling submodules (large repositories/LFS assets may take a while)...',flush=True)
+        for attempt in range(1,4):
+            try:
+                run(['git','-C',str(checkout),'-c','lfs.url=https://github.com/darlinghq/darling-swift.git/info/lfs',
+                     'submodule','update','--init','--recursive','--depth','1','--progress'])
+                break
+            except subprocess.CalledProcessError:
+                if attempt==3:raise
+                print(f'Submodule fetch interrupted (attempt {attempt}/3). Retrying...',flush=True)
+        checkout.rename(source)
 
-# Compatibility fix: glibc 2.38+ provides strlcpy/strlcat in <string.h> with noexcept.
-# In cctools-port ld64, conditionally guard the fallback declarations to avoid redeclaration conflicts with modern glibc.
-cctools_strlcat = source / 'src/external/cctools-port/cctools/ld64/src/3rd/strlcat.h'
-if cctools_strlcat.exists():
-    content = cctools_strlcat.read_text()
-    if '#if !defined(__GLIBC__) || !__GLIBC_PREREQ(2, 38)' not in content:
-        cctools_strlcat.write_text(content.replace(
-            'size_t strlcat(char *dst, const char *src, size_t siz);',
-            '#if !defined(__GLIBC__) || !__GLIBC_PREREQ(2, 38)\nsize_t strlcat(char *dst, const char *src, size_t siz);\n#endif'
-        ))
-cctools_strlcpy = source / 'src/external/cctools-port/cctools/ld64/src/3rd/strlcpy.h'
-if cctools_strlcpy.exists():
-    content = cctools_strlcpy.read_text()
-    if '#if !defined(__GLIBC__) || !__GLIBC_PREREQ(2, 38)' not in content:
-        cctools_strlcpy.write_text(content.replace(
-            'size_t strlcpy(char *dst, const char *src, size_t siz);',
-            '#if !defined(__GLIBC__) || !__GLIBC_PREREQ(2, 38)\nsize_t strlcpy(char *dst, const char *src, size_t siz);\n#endif'
-        ))
-
-# Ensure tools/shutdown-user.sh doesn't fail when invoked in unprivileged containers (e.g. bwrap FHS)
-shutdown_script = source / 'tools/shutdown-user.sh'
-if shutdown_script.exists():
-    txt = shutdown_script.read_text()
-    if 'command -v sudo' not in txt:
-        shutdown_script.write_text(txt.replace(
-            'if [ "$(whoami)" != "root" ]; then\n    echo "$0 must be run as root, invoking sudo"\n    exec sudo sh "$0" "$@"\nfi',
-            'if [ "$(whoami)" != "root" ]; then\n    if ! command -v sudo >/dev/null 2>&1 || ! sudo -n true 2>/dev/null; then\n        PID=$(running_pids 2>/dev/null | head -n1 || true)\n        if [ -n "$PID" ]; then darling shutdown 2>/dev/null || true; fi\n        exit 0\n    fi\n    echo "$0 must be run as root, invoking sudo"\n    exec sudo sh "$0" "$@"\nfi'
-        ))
 # Never reset someone else's checkout to make a patch apply.
 for component in manifest['components']:
     repo=source/component['path']
